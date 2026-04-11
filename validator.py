@@ -34,7 +34,7 @@ def generate_manifest():
             "Duplicate Files": [],
             "Corrupted Files": []
         },
-        "Manifest": {}
+        "Manifest": []
     }
 
     # A dictionary to track file names and jsonfiles and their occurrences for
@@ -42,7 +42,9 @@ def generate_manifest():
     # TODO: duplicate_tracking = {}
 
     # Walk through the current directory and validate files
-    for root, dirs, files in os.walk('.', topdown=True):
+    for root, dirs, files in os.walk(
+            './GoogleTakeoutTest/Consolidated/',
+            topdown=True):
         for file in files:
             json_file = None
 
@@ -103,9 +105,13 @@ def generate_manifest():
 
     manifest["Report"]["Total JSON Files"] = len(manifest["Manifest"])
 
+    manifestFileName = 'manifest.json'
+
     # Save the manifest to a JSON file
-    with open('manifest.json', 'w') as f:
+    with open(manifestFileName, 'w') as f:
         json.dump(manifest, f, indent=4)
+
+    return manifestFileName
 
 
 def ppManifest(manifest_name):
