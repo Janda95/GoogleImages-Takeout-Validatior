@@ -14,57 +14,36 @@ def generate_manifest(media_root: str) -> str:
     Generate a Manifest file with the validation results. \n
     media_root: path to the root directory containing the media and JSON files
     The Manifest file will be in JSON with the following structure:
-
-    {
-        "Summary": {
-            "JSON": 0,
-            "Media": 0,
-            "Unique": 0,
-            "Duplicates": 0,
-            "Corrupted": 0,
-            "Missing": 0
-        },
-        "Manifest": [
-            {
-                "File Name": "photo1.jpg",
-                "File Size": 123456,
-                "Timestamp": "1672531200",
-                "Validation Status": "Valid",
-                "Instances": [
-                    {
-                    "Path": "/root/GoogleTakeout/Photos/photo1.jpg",
-                    "Download URL": "https://download.example/photo1.jpg"
-                    }
-                ],
+        {
+            "Summary": {
+                "JSON": int,
+                "Media": int,
+                "Unique": int,
+                "Duplicates": int,
+                "Corrupted": int,
+                "Missing": int
             },
-            {
-                "File Name": "photo2.jpg",
-                "File Size": 654321,
-                "Timestamp": "1672531300",
-                "Validation Status": "Duplicate",
-                "Instances": [
-                    {
-                    "Path": "/root/GoogleTakeout/Photos/photo2.jpg",
-                    "Download URL": "https://download.example/photo2.jpg"
-                    },
-                    {
-                    "Path": "/root/GoogleTakeout/Photos/Copy/photo2.jpg",
-                    "Download URL": "https://download.example/photo2.jpg"
-                    }
-                ]
-            }
-        ],
-        "Media_Errors": {
-            "Missing Files": [
-                "path/to/missing/file1",
-                "path/to/missing/file2"
+            "Manifest": [
+                {
+                    "File_Name": str,
+                    "File_Size": int,
+                    "Timestamp": str,
+                    "Validation_Status": str,  # Valid, Corrupted, Missing
+                    "Instances": [
+                        {
+                            "Path": str,
+                            "Download_URL": str
+                        },
+                        ...
+                    ]
+                },
+                ...
             ],
-            "Corrupted Files": [
-                "path/to/corrupted/file1",
-                "path/to/corrupted/file2"
-            ]
+            "Media_Errors": {
+                "Missing Files": [str, ...],
+                "Corrupted Files": [str, ...]
+            }
         }
-    }
     '''
 
     manifest = {
@@ -76,7 +55,7 @@ def generate_manifest(media_root: str) -> str:
             "Corrupted": 0,
             "Missing": 0
         },
-        "Manifest": {},
+        "Manifest": [],
         "Media_Errors": {
             "Missing Files": [],
             "Corrupted Files": []
@@ -133,7 +112,7 @@ def generate_manifest(media_root: str) -> str:
             except OSError as e:
                 msg: str = (f"Media missing for {media_file_path}: {e}")
 
-                # If the media file is missing, mark it as such and add to the 
+                # If the media file is missing, mark it as such and add to the
                 # manifest, but continue processing other files
                 validation_status: str = "Missing"
                 manifest["Summary"]["Missing"] += 1
@@ -161,20 +140,24 @@ def generate_manifest(media_root: str) -> str:
     for item in media_items:
         file_name, file_size, timestamp, validation_status = item
         paths_and_downloads: list = duplicate_tracker.get((file_name, file_size), [])
-        catagory: str = "Duplicates" if len(paths_and_downloads) > 1 else "Unique"
+
+        instances = []
+        for path, download in paths_and_downloads:
+            instances.append({
+                "Path": path,
+                "Download_URL": download
+            })
 
         # Count duplicates beyond the first occurrence
-        if catagory == "Duplicates":
-            manifest["Summary"]["Duplicates"] += len(paths_and_downloads) - 1
-
+        manifest["Summary"]["Duplicates"] += len(paths_and_downloads) - 1
         manifest["Summary"]["Unique"] += 1
 
-        manifest["Manifest"][catagory].append({
+        manifest["Manifest"].append({
             "File_Name": file_name,
             "File_Size": file_size,
             "Timestamp": timestamp,
-            "PathsAndDownloads": paths_and_downloads,
-            "Validation_Status": validation_status
+            "Validation_Status": validation_status,
+            "Instances": instances,
         })
 
     # Generate a timestamped manifest file name and save the manifest as JSON
