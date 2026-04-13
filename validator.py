@@ -104,7 +104,7 @@ def generate_manifest(media_root: str) -> str:
                 validation_status = "Missing"
                 validation_errors.append(str(e))
 
-                manifest["Missing Files"].append(file_path)
+                manifest["Errors"]["Missing Files"].append(file_path)
 
             manifest["Manifest"].append({
                 "File Name": file_name,
@@ -160,12 +160,13 @@ def pp_manifest(manifest_name: str) -> None:
     print("Report:")
     print(f"Total JSON Files: {manifest['Report']['Total JSON Files']}")
     print(f"Total Media Files: {manifest['Report']['Total Media Files']}")
-    print(f"Missing Files: {len(manifest['Report']['Missing Files'])}")
+    print(f"Total Duplicate Files: {manifest['Report']['Total Duplicate Files']}")
+    print(f"Missing Files: {len(manifest['Errors']['Missing Files'])}")
     
     duplicate_report = manifest['Report'].get('Duplicate Files')
-    if duplicate_report is not None:
+    if manifest['Report']['Total Duplicate Files'] > 0 and duplicate_report:
         print(f"Duplicate Files: {len(duplicate_report)} duplicate names")
-    print(f"Corrupted Files: {len(manifest['Report']['Corrupted Files'])}")
+    print(f"Corrupted Files: {len(manifest['Errors']['Corrupted Files'])}")
 
 
 def main() -> None:
