@@ -5,8 +5,11 @@
 import argparse
 import os
 from datetime import datetime
-from os.path import join, getsize
+from os.path import getsize
 import json
+from pathlib import Path
+from collections import defaultdict
+from typing import Dict, List, Tuple
 
 
 def generate_manifest(media_root: str) -> str:
@@ -25,14 +28,14 @@ def generate_manifest(media_root: str) -> str:
             },
             "Manifest": [
                 {
-                    "File_Name": str,
-                    "File_Size": int,
-                    "Timestamp": str,
-                    "Validation_Status": str,  # Valid, Corrupted, Missing
-                    "Instances": [
+                    "file_name": str,
+                    "file_size": int,
+                    "timestamp": str,
+                    "validation_status": str,  # Valid, Corrupted, Missing
+                    "instances": [
                         {
-                            "Path": str,
-                            "Download_URL": str
+                            "path": str,
+                            "download_url": str
                         },
                         ...
                     ]
@@ -46,6 +49,7 @@ def generate_manifest(media_root: str) -> str:
         }
     '''
 
+    # Initialize the manifest structure with summary counts and error tracking
     manifest = {
         "Summary": {
             "JSON": 0,
@@ -62,28 +66,34 @@ def generate_manifest(media_root: str) -> str:
         }
     }
 
-    media_items = set()
-    duplicate_tracker = {}
+    media_items = []
+    duplicate_tracker = defaultdict(list)
 
     # Walk through the provided media root directory and validate files
-    for root, dirs, files in os.walk(media_root, topdown=True):
+    for root, dirs, files in os.walk(Path(media_root), topdown=True):
         for file in files:
-            json_file: dict = None
+            json_file: Dict = None
 
             # Only process JSON files for validation, media files will be 
             # validated based on the JSON metadata
-            if file.endswith('supplemental-metada.json'):
-                json_file: dict = json.load(open(join(root, file)))
-                manifest["Summary"]["JSON"] += 1
-            else:
+            if not file.endswith('supplemental-metada.json'):
                 continue
 
-            json_file_path: str = join(root, file)
+            json_file_path: str = root + '/' + file
+
+            with open(json_file_path, 'r') as f:
+                try:
+                    json_file = json.load(f)
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON file {json_file_path}: {e}")
+                    continue
+
+            manifest["Summary"]["JSON"] += 1
 
             try:
                 media_file_name: str = json_file.get("title")
                 download_url: str = json_file.get("url")
-                photo_taken_time: dict = json_file.get("photoTakenTime", {})
+                photo_taken_time: Dict = json_file.get("photoTakenTime", {})
                 timestamp: str = photo_taken_time.get("timestamp", "")
 
             except KeyError as e:
@@ -96,7 +106,7 @@ def generate_manifest(media_root: str) -> str:
 
             # Check for media file existence and validate size
             try:
-                media_file_path: str = join(root, media_file_name)
+                media_file_path: str = root + '/' + media_file_name
                 file_size: int = getsize(media_file_path)
 
                 # Files with size 0 are considered corrupted
@@ -120,34 +130,39 @@ def generate_manifest(media_root: str) -> str:
                 continue
 
             # Track duplicates based on file name and size
-            duplicate_key: tuple = (media_file_name, file_size)
+            duplicate_key: Tuple = (media_file_name, file_size)
             if duplicate_key in duplicate_tracker:
                 duplicate_tracker[duplicate_key].append(
                     (media_file_path, download_url))
+                # Skip adding duplicate records to the manifest until we
+                # process all files
+                continue
+            
             else:
-                duplicate_tracker[duplicate_key] = [(media_file_path, download_url)]
+                duplicate_tracker[duplicate_key] = [
+                    (media_file_path, download_url)]
 
             # Build the record for the manifest
-            record: tuple = (
+            record: Tuple = (
                 media_file_name,
                 file_size,
                 timestamp,
                 validation_status
             )
 
-            media_items.add(record)
+            media_items.append(record)
 
     for item in media_items:
         file_name, file_size, timestamp, validation_status = item
-        paths_and_downloads: list = duplicate_tracker.get(
+        paths_and_downloads: List = duplicate_tracker.get(
             (file_name, file_size),
             [])
 
         instances = []
         for path, download in paths_and_downloads:
             instances.append({
-                "Path": path,
-                "Download_URL": download
+                "path": path,
+                "download_url": download
             })
 
         # Count duplicates beyond the first occurrence
@@ -155,19 +170,21 @@ def generate_manifest(media_root: str) -> str:
         manifest["Summary"]["Unique"] += 1
 
         manifest["Manifest"].append({
-            "File_Name": file_name,
-            "File_Size": file_size,
-            "Timestamp": timestamp,
-            "Validation_Status": validation_status,
-            "Instances": instances,
+            "file_name": file_name,
+            "file_size": file_size,
+            "timestamp": timestamp,
+            "validation_status": validation_status,
+            "instances": instances,
         })
 
     # Generate a timestamped manifest file name and save the manifest as JSON
-    manifestFileName = f'''
-        manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'''
+    manifestFileName = f'manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
 
     with open(manifestFileName, 'w') as f:
-        json.dump(manifest, f, indent=4)
+        try:
+            json.dump(manifest, f, indent=4)
+        except Exception as e:
+            print(f"Error saving manifest file {manifestFileName}: {e}")
 
     return manifestFileName
 
@@ -176,7 +193,11 @@ def pp_manifest(manifest_name: str) -> None:
     '''Pretty print the Manifest file'''
 
     with open(manifest_name, 'r') as f:
-        manifest = json.load(f)
+        try:
+            manifest = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Error decoding manifest file {manifest_name}: {e}")
+            return
 
     for category, result in manifest["Summary"].items():
         print(f"{category}: {result}")
@@ -207,6 +228,8 @@ def main() -> None:
         default='.',
         help='Path to the root directory containing the media and JSON files.')
     args = parser.parse_args()
+
+    print(f"Validating media in root directory: {args.media_root}")
 
     manifest_name = generate_manifest(args.media_root)
     pp_manifest(manifest_name)
