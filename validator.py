@@ -24,24 +24,36 @@ def generate_manifest(media_root: str) -> str:
             "Corrupted": 0,
             "Missing": 0
         },
-        "Manifest": {
-            "Unique": {
-                "File_Name": {
-                    "File_Size": 0,
-                    "Timestamp": "",
-                    "PathsAndDownloads": [],
-                    "Validation_Status": "Valid/Missing/Corrupted",
-                }
+        "Manifest": [
+            {
+                "File Name": "photo1.jpg",
+                "File Size": 123456,
+                "Timestamp": "1672531200",
+                "Validation Status": "Valid",
+                "Instances": [
+                    {
+                    "Path": "/root/GoogleTakeout/Photos/photo1.jpg",
+                    "Download URL": "https://download.example/photo1.jpg"
+                    }
+                ],
             },
-            "Duplicate": [
-                    "File_Name":
-                    "File_Size": 0,
-                    "Timestamp": "",
-                    "PathsAndDownloads": [],
-                    "Validation_Status": "Valid/Missing/Corrupted",
+            {
+                "File Name": "photo2.jpg",
+                "File Size": 654321,
+                "Timestamp": "1672531300",
+                "Validation Status": "Duplicate",
+                "Instances": [
+                    {
+                    "Path": "/root/GoogleTakeout/Photos/photo2.jpg",
+                    "Download URL": "https://download.example/photo2.jpg"
+                    },
+                    {
+                    "Path": "/root/GoogleTakeout/Photos/Copy/photo2.jpg",
+                    "Download URL": "https://download.example/photo2.jpg"
+                    }
                 ]
             }
-        },
+        ],
         "Media_Errors": {
             "Missing Files": [
                 "path/to/missing/file1",
@@ -64,10 +76,7 @@ def generate_manifest(media_root: str) -> str:
             "Corrupted": 0,
             "Missing": 0
         },
-        "Manifest": {
-            "Unique": [],
-            "Duplicates": []
-        },
+        "Manifest": {},
         "Media_Errors": {
             "Missing Files": [],
             "Corrupted Files": []
