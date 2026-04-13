@@ -2,14 +2,16 @@
 
 '''Validator via Manifest Generation for Google Images Takeout data'''
 
+import argparse
 import os
 from os.path import join, getsize
 import json
 
 
-def generate_manifest():
+def generate_manifest(media_root: str) -> str:
     '''
     Generate a Manifest file with the validation results. \n
+    media_root: path to the root directory containing the media and JSON files
     The Manifest file should be in JSON format and contain the following:
     - Report
         - Total number of JSON files
@@ -41,10 +43,8 @@ def generate_manifest():
     #   duplicate detection
     # TODO: duplicate_tracking = {}
 
-    # Walk through the current directory and validate files
-    for root, dirs, files in os.walk(
-            './GoogleTakeoutTest/Consolidated/',
-            topdown=True):
+    # Walk through the provided media root directory and validate files
+    for root, dirs, files in os.walk(media_root, topdown=True):
         for file in files:
             json_file = None
 
@@ -114,7 +114,7 @@ def generate_manifest():
     return manifestFileName
 
 
-def ppManifest(manifest_name):
+def ppManifest(manifest_name: str) -> None:
     '''Pretty print the Manifest file'''
 
     with open(manifest_name, 'r') as f:
@@ -128,14 +128,21 @@ def ppManifest(manifest_name):
     print(f"Corrupted Files: {len(manifest['Report']['Corrupted Files'])}")
 
 
-def main():
+def main() -> None:
     '''
-    Validate the data in current head of directory. Generate a Manifest file
+    Validate the data from a root media directory. Generate a Manifest file
     with the validation results. Print the validation report to the console.
     '''
 
-    manifest_name = generate_manifest()
+    parser = argparse.ArgumentParser(
+        description='Validate Google Takeout media JSON and generate a manifest.')
+    parser.add_argument(
+        '--media-root',
+        default='./GoogleTakeoutTest/Consolidated/',
+        help='Path to the root directory containing the media and JSON files.')
+    args = parser.parse_args()
 
+    manifest_name = generate_manifest(args.media_root)
     ppManifest(manifest_name)
 
 
