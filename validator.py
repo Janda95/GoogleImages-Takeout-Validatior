@@ -139,7 +139,9 @@ def generate_manifest(media_root: str) -> str:
 
     for item in media_items:
         file_name, file_size, timestamp, validation_status = item
-        paths_and_downloads: list = duplicate_tracker.get((file_name, file_size), [])
+        paths_and_downloads: list = duplicate_tracker.get(
+            (file_name, file_size),
+            [])
 
         instances = []
         for path, download in paths_and_downloads:
@@ -161,7 +163,8 @@ def generate_manifest(media_root: str) -> str:
         })
 
     # Generate a timestamped manifest file name and save the manifest as JSON
-    manifestFileName = f'manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
+    manifestFileName = f'''
+        manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'''
 
     with open(manifestFileName, 'w') as f:
         json.dump(manifest, f, indent=4)
@@ -196,10 +199,12 @@ def main() -> None:
     '''
 
     parser = argparse.ArgumentParser(
-        description='Validate Google Takeout media JSON and generate a manifest.')
+        description='''Validate Google Takeout media JSON and generate a
+            manifest.'''
+    )
     parser.add_argument(
         '--media-root',
-        default='./GoogleTakeoutTest/Consolidated/',
+        default='.',
         help='Path to the root directory containing the media and JSON files.')
     args = parser.parse_args()
 
