@@ -59,11 +59,7 @@ def generate_manifest(media_root: str) -> str:
             "Corrupted": 0,
             "Missing": 0
         },
-        "Manifest": [],
-        "Media_Errors": {
-            "Missing Files": [],
-            "Corrupted Files": []
-        }
+        "Manifest": []
     }
 
     media_items = []
@@ -113,8 +109,12 @@ def generate_manifest(media_root: str) -> str:
                 if file_size == 0:
                     validation_status = "Corrupted"
                     manifest["Summary"]["Corrupted"] += 1
-                    manifest["Media_Errors"]["Corrupted Files"].append(
-                        media_file_path)
+
+                    errors = manifest.setdefault("Media_Errors", {
+                        "Missing Files": [],
+                        "Corrupted Files": []
+                    })
+                    errors["Corrupted Files"].append(media_file_path)
                 else:
                     # Successfully validated media file
                     manifest["Summary"]["Media"] += 1
@@ -126,7 +126,12 @@ def generate_manifest(media_root: str) -> str:
                 # manifest, but continue processing other files
                 validation_status: str = "Missing"
                 manifest["Summary"]["Missing"] += 1
-                manifest["Media_Errors"]["Missing Files"].append(msg)
+
+                errors = manifest.setdefault("Media_Errors", {
+                    "Missing Files": [],
+                    "Corrupted Files": []
+                })
+                errors["Missing Files"].append(msg)
                 continue
 
             # Track duplicates based on file name and size
@@ -137,7 +142,7 @@ def generate_manifest(media_root: str) -> str:
                 # Skip adding duplicate records to the manifest until we
                 # process all files
                 continue
-            
+
             else:
                 duplicate_tracker[duplicate_key] = [
                     (media_file_path, download_url)]
@@ -202,15 +207,16 @@ def pp_manifest(manifest_name: str) -> None:
     for category, result in manifest["Summary"].items():
         print(f"{category}: {result}")
 
-    if manifest["Media_Errors"]["Missing Files"]:
-        print("\nMissing Files:")
-        for missing in manifest["Media_Errors"]["Missing Files"]:
-            print(f"  - {missing}")
+    if manifest.get("Media_Errors"):
+        if manifest["Media_Errors"]["Missing Files"]:
+            print("\nMissing Files:")
+            for missing in manifest["Media_Errors"]["Missing Files"]:
+                print(f"  - {missing}")
 
-    if manifest["Media_Errors"]["Corrupted Files"]:
-        print("\nCorrupted Files:")
-        for corrupted in manifest["Media_Errors"]["Corrupted Files"]:
-            print(f"  - {corrupted}")
+        if manifest["Media_Errors"]["Corrupted Files"]:
+            print("\nCorrupted Files:")
+            for corrupted in manifest["Media_Errors"]["Corrupted Files"]:
+                print(f"  - {corrupted}")
 
 
 def main() -> None:
