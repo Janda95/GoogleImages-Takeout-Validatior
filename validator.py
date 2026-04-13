@@ -39,9 +39,20 @@ def generate_manifest(media_root: str) -> str:
         "Manifest": []
     }
 
-    # A dictionary to track file names and jsonfiles and their occurrences for
-    #   duplicate detection
-    # TODO: duplicate_tracking = {}
+    # Build an index of all media files by (name, size) so duplicates can be detected
+    media_index = {}
+    for root, dirs, files in os.walk(media_root, topdown=True):
+        for file in files:
+            if file.endswith(('.jpg', '.png', '.mp4', '.avi')):
+                file_path = join(root, file)
+                try:
+                    size = getsize(file_path)
+                except OSError:
+                    continue
+                media_index.setdefault((file, size), []).append(file_path)
+
+    duplicate_keys = {key for key, paths in media_index.items() if len(paths) > 1}
+    manifest["Report"]["Duplicate Files"] = [path for paths in media_index.values() if len(paths) > 1 for path in paths]
 
     # Walk through the provided media root directory and validate files
     for root, dirs, files in os.walk(media_root, topdown=True):
@@ -78,13 +89,16 @@ def generate_manifest(media_root: str) -> str:
                 timestamp = photoTakenTime.get("timestamp", "")
 
             try:
-                file_size = getsize(join(root, file_name))
+                media_path = join(root, file_name)
+                file_size = getsize(media_path)
 
                 if file_size == 0:
                     validation_status = "Corrupted"
                     manifest["Report"]["Corrupted Files"].append(file_path)
                 else:
                     manifest["Report"]["Total Media Files"] += 1
+                    if (file_name, file_size) in duplicate_keys:
+                        validation_status = "Duplicate"
 
             except OSError as e:
                 print(f"Error finding file {file_path}: {e}")
