@@ -17,9 +17,9 @@ def generate_manifest(media_root: str) -> str:
     - Report
         - Total number of JSON files
         - Total number of media files
-        - Missing Files
-        - Duplicate Files
-        - Corrupted Files
+        - Total number of duplicate files
+        - Total number of corrupted files
+        - Total number of missing files
     - Manifest
         - File Name
         - File Size
@@ -27,6 +27,10 @@ def generate_manifest(media_root: str) -> str:
         - Download URL
         - Validation Status (Valid, Missing, Duplicate, Corrupted)
         - Validation Errors (if any)
+    - Duplicate Files (if any) - a list of duplicate file names and their paths
+    - Errors
+        - Missing Files (if any) - a list of missing file names and their paths
+        - Corrupted Files (if any) - a list of corrupted file names and their paths
     '''
 
     manifest = {
@@ -37,12 +41,7 @@ def generate_manifest(media_root: str) -> str:
             "Total Corrupted Files": 0,
             "Total Missing Files": 0
         },
-        "Manifest": [],
-        "Duplicate Files": {},
-        "Errors": {
-            "Missing Files": [],
-            "Corrupted Files": []
-        },
+        "Manifest": []
     }
 
     # Build an index of all media files by (name, size) so duplicates can be detected
@@ -92,10 +91,16 @@ def generate_manifest(media_root: str) -> str:
 
                 if file_size == 0:
                     validation_status = "Corrupted"
-                    manifest["Report"]["Corrupted Files"].append(file_path)
+                    manifest["Report"]["Total Corrupted Files"] += 1
+                    if "Errors" not in manifest:
+                        manifest["Errors"] = {
+                            "Missing Files": [],
+                            "Corrupted Files": []
+                        }
+                    manifest["Errors"]["Corrupted Files"].append(file_path)
                 else:
                     manifest["Report"]["Total Media Files"] += 1
-                    if (file_name, file_size) in duplicate_files:
+                    if file_name in duplicate_files:
                         validation_status = "Duplicate"
 
             except OSError as e:
@@ -103,7 +108,12 @@ def generate_manifest(media_root: str) -> str:
 
                 validation_status = "Missing"
                 validation_errors.append(str(e))
-
+                manifest["Report"]["Total Missing Files"] += 1
+                if "Errors" not in manifest:
+                    manifest["Errors"] = {
+                        "Missing Files": [],
+                        "Corrupted Files": []
+                    }
                 manifest["Errors"]["Missing Files"].append(file_path)
 
             manifest["Manifest"].append({
@@ -126,7 +136,7 @@ def generate_manifest(media_root: str) -> str:
     return manifestFileName
 
 
-def build_media_index(media_root: str) -> dict[(str, int)][str]:
+def build_media_index(media_root: str) -> dict[str, list[str]]:
     '''Build an index of media files by (name, size) for duplicate detection'''
 
     media_index = {}
@@ -140,15 +150,14 @@ def build_media_index(media_root: str) -> dict[(str, int)][str]:
                     continue
                 media_index.setdefault((file, size), []).append(file_path)
 
-    # Identify duplicate keys (file name and size) that have more than one path
-    duplicate_keys = {key for key, paths in media_index.items() if len(paths) > 1}
+    duplicate_files = {}
 
     # Build a dictionary of duplicate file names to their paths
     for (file_name, _size), paths in media_index.items():
         if len(paths) > 1:
-            duplicate_keys.setdefault(file_name, []).extend(paths)
+            duplicate_files.setdefault(file_name, []).extend(paths)
 
-    return duplicate_keys
+    return duplicate_files
 
 
 def pp_manifest(manifest_name: str) -> None:
@@ -161,12 +170,15 @@ def pp_manifest(manifest_name: str) -> None:
     print(f"Total JSON Files: {manifest['Report']['Total JSON Files']}")
     print(f"Total Media Files: {manifest['Report']['Total Media Files']}")
     print(f"Total Duplicate Files: {manifest['Report']['Total Duplicate Files']}")
-    print(f"Missing Files: {len(manifest['Errors']['Missing Files'])}")
-    
-    duplicate_report = manifest['Report'].get('Duplicate Files')
-    if manifest['Report']['Total Duplicate Files'] > 0 and duplicate_report:
-        print(f"Duplicate Files: {len(duplicate_report)} duplicate names")
-    print(f"Corrupted Files: {len(manifest['Errors']['Corrupted Files'])}")
+    print(f"Total Corrupted Files: {manifest['Report']['Total Corrupted Files']}")
+    print(f"Total Missing Files: {manifest['Report']['Total Missing Files']}")
+
+    if manifest.get("Errors"):
+        print(f"Missing Files: {len(manifest['Errors']['Missing Files'])}")
+        print(f"Corrupted Files: {len(manifest['Errors']['Corrupted Files'])}")
+
+    if manifest.get("Duplicate Files"):
+        print(f"Duplicate Names: {len(manifest['Duplicate Files'])}")
 
 
 def main() -> None:
