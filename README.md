@@ -24,7 +24,9 @@ If `media-root` flag is ommited, defaults to `./`
 This script walks through a consolidated Takeout tree, validates each `supplemental-metada.json` file against its media, and writes a timestamped manifest JSON file.
 
 ### JSON Output Example:
-~~~ 
+
+This example shows the optimal output when no media files are missing or corrupted.
+~~~json
 {
     "Summary": {
         "JSON": 1209,
@@ -64,6 +66,18 @@ This script walks through a consolidated Takeout tree, validates each `supplemen
             ]
         }
     ]
+}
+~~~
+
+If errors are detected, the generated manifest will also include:
+~~~json
+"Media_Errors": {
+  "Missing Files": [
+    "/path/to/missing/file1.jpg"
+  ],
+  "Corrupted Files": [
+    "/path/to/corrupted/file2.jpg"
+  ]
 }
 ~~~
 
