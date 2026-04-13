@@ -27,6 +27,8 @@ This script walks through a consolidated Takeout tree, validates each `supplemen
 
 This example shows the optimal output when no media files are missing or corrupted.
 ~~~json
+manifest_timestamp.json
+
 {
     "Summary": {
         "JSON": 1209,
