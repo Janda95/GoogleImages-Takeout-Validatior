@@ -13,151 +13,168 @@ def generate_manifest(media_root: str) -> str:
     '''
     Generate a Manifest file with the validation results. \n
     media_root: path to the root directory containing the media and JSON files
-    The Manifest file should be in JSON format and contain the following:
-    - Report
-        - Total number of JSON files
-        - Total number of media files
-        - Total number of duplicate files
-        - Total number of corrupted files
-        - Total number of missing files
-    - Manifest
-        - File Name
-        - File Size
-        - Timestamp
-        - Download URL
-        - Validation Status (Valid, Missing, Duplicate, Corrupted)
-        - Validation Errors (if any)
-    - Duplicate Files (if any) - a list of duplicate file names and their paths
-    - Errors
-        - Missing Files (if any) - a list of missing file names and their paths
-        - Corrupted Files (if any) - a list of corrupted file names and their paths
+    The Manifest file will be in JSON with the following structure:
+
+    {
+        "Summary": {
+            "JSON": 0,
+            "Media": 0,
+            "Unique": 0,
+            "Duplicates": 0,
+            "Corrupted": 0,
+            "Missing": 0
+        },
+        "Manifest": {
+            "Unique": {
+                "File_Name": {
+                    "File_Size": 0,
+                    "Timestamp": "",
+                    "PathsAndDownloads": [],
+                    "Validation_Status": "Valid/Missing/Corrupted",
+                }
+            },
+            "Duplicate": [
+                    "File_Name":
+                    "File_Size": 0,
+                    "Timestamp": "",
+                    "PathsAndDownloads": [],
+                    "Validation_Status": "Valid/Missing/Corrupted",
+                ]
+            }
+        },
+        "Media_Errors": {
+            "Missing Files": [
+                "path/to/missing/file1",
+                "path/to/missing/file2"
+            ],
+            "Corrupted Files": [
+                "path/to/corrupted/file1",
+                "path/to/corrupted/file2"
+            ]
+        }
+    }
     '''
 
     manifest = {
-        "Report": {
-            "Total JSON Files": 0,
-            "Total Media Files": 0,
-            "Total Duplicate Files": 0,
-            "Total Corrupted Files": 0,
-            "Total Missing Files": 0
+        "Summary": {
+            "JSON": 0,
+            "Media": 0,
+            "Unique": 0,
+            "Duplicates": 0,
+            "Corrupted": 0,
+            "Missing": 0
         },
-        "Manifest": []
+        "Manifest": {
+            "Unique": [],
+            "Duplicates": []
+        },
+        "Media_Errors": {
+            "Missing Files": [],
+            "Corrupted Files": []
+        }
     }
 
-    # Build an index of all media files by (name, size) so duplicates can be detected
-    duplicate_files = build_media_index(media_root)
-
-    if duplicate_files:
-        manifest["Duplicate Files"] = duplicate_files
-        manifest["Report"]["Total Duplicate Files"] = len(duplicate_files)
+    media_items = set()
+    duplicate_tracker = {}
 
     # Walk through the provided media root directory and validate files
     for root, dirs, files in os.walk(media_root, topdown=True):
         for file in files:
-            json_file = None
+            json_file: dict = None
 
+            # Only process JSON files for validation, media files will be 
+            # validated based on the JSON metadata
             if file.endswith('supplemental-metada.json'):
-                json_file = json.load(open(join(root, file)))
-                manifest["Report"]["Total JSON Files"] += 1
-            elif file.endswith(('.jpg', '.png', '.mp4', '.avi')):
-                # Check for duplicates based on file name and size
-                continue
+                json_file: dict = json.load(open(join(root, file)))
+                manifest["Summary"]["JSON"] += 1
             else:
-                # Unsupported file type, skip validation
                 continue
 
-            file_path = join(root, file)
+            json_file_path: str = join(root, file)
+
             try:
-                file_name = json_file.get("title")
-                download_url = json_file.get("url")
+                media_file_name: str = json_file.get("title")
+                download_url: str = json_file.get("url")
+                photo_taken_time: dict = json_file.get("photoTakenTime", {})
+                timestamp: str = photo_taken_time.get("timestamp", "")
+
             except KeyError as e:
-                print(f"Error parsing JSON file {file_path}: {e}")
+                print(f"Error parsing JSON file {json_file_path}: {e}")
                 continue
 
             # Initialize validation fields
-            timestamp = ""
-            file_size = 0
+            file_size: int = 0
+            validation_status: str = "Valid"
 
-            validation_status = "Valid"
-            validation_errors = []
-
-            photoTakenTime = json_file.get("PhotoTakenTime", None)
-            if photoTakenTime:
-                timestamp = photoTakenTime.get("timestamp", "")
-
+            # Check for media file existence and validate size
             try:
-                media_path = join(root, file_name)
-                file_size = getsize(media_path)
+                media_file_path: str = join(root, media_file_name)
+                file_size: int = getsize(media_file_path)
 
+                # Files with size 0 are considered corrupted
                 if file_size == 0:
                     validation_status = "Corrupted"
-                    manifest["Report"]["Total Corrupted Files"] += 1
-                    if "Errors" not in manifest:
-                        manifest["Errors"] = {
-                            "Missing Files": [],
-                            "Corrupted Files": []
-                        }
-                    manifest["Errors"]["Corrupted Files"].append(file_path)
+                    manifest["Summary"]["Corrupted"] += 1
+                    manifest["Media_Errors"]["Corrupted Files"].append(
+                        media_file_path)
                 else:
-                    manifest["Report"]["Total Media Files"] += 1
-                    if file_name in duplicate_files:
-                        validation_status = "Duplicate"
+                    # Successfully validated media file
+                    manifest["Summary"]["Media"] += 1
 
             except OSError as e:
-                print(f"Error finding file {file_path}: {e}")
+                msg: str = (f"Media missing for {media_file_path}: {e}")
 
-                validation_status = "Missing"
-                validation_errors.append(str(e))
-                manifest["Report"]["Total Missing Files"] += 1
-                if "Errors" not in manifest:
-                    manifest["Errors"] = {
-                        "Missing Files": [],
-                        "Corrupted Files": []
-                    }
-                manifest["Errors"]["Missing Files"].append(file_path)
+                # If the media file is missing, mark it as such and add to the 
+                # manifest, but continue processing other files
+                validation_status: str = "Missing"
+                manifest["Summary"]["Missing"] += 1
+                manifest["Media_Errors"]["Missing Files"].append(msg)
+                continue
 
-            manifest["Manifest"].append({
-                "File Name": file_name,
-                "File Size": file_size,
-                "Timestamp": timestamp,
-                "Download URL": download_url,
-                "Validation Status": validation_status,
-                "Validation Errors": validation_errors
-            })
+            # Track duplicates based on file name and size
+            duplicate_key: tuple = (media_file_name, file_size)
+            if duplicate_key in duplicate_tracker:
+                duplicate_tracker[duplicate_key].append(
+                    (media_file_path, download_url))
+            else:
+                duplicate_tracker[duplicate_key] = [(media_file_path, download_url)]
 
-    manifest["Report"]["Total JSON Files"] = len(manifest["Manifest"])
+            # Build the record for the manifest
+            record: tuple = (
+                media_file_name,
+                file_size,
+                timestamp,
+                validation_status
+            )
 
+            media_items.add(record)
+
+    for item in media_items:
+        file_name, file_size, timestamp, validation_status = item
+        paths_and_downloads: list = duplicate_tracker.get((file_name, file_size), [])
+        catagory: str = "Duplicates" if len(paths_and_downloads) > 1 else "Unique"
+
+        # Count duplicates beyond the first occurrence
+        if catagory == "Duplicates":
+            manifest["Summary"]["Duplicates"] += len(paths_and_downloads) - 1
+
+        manifest["Summary"]["Unique"] += 1
+
+        manifest["Manifest"][catagory].append({
+            "File_Name": file_name,
+            "File_Size": file_size,
+            "Timestamp": timestamp,
+            "PathsAndDownloads": paths_and_downloads,
+            "Validation_Status": validation_status
+        })
+
+    # Generate a timestamped manifest file name and save the manifest as JSON
     manifestFileName = f'manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
 
-    # Save the manifest to a JSON file
     with open(manifestFileName, 'w') as f:
         json.dump(manifest, f, indent=4)
 
     return manifestFileName
-
-
-def build_media_index(media_root: str) -> dict[str, list[str]]:
-    '''Build an index of media files by (name, size) for duplicate detection'''
-
-    media_index = {}
-    for root, dirs, files in os.walk(media_root, topdown=True):
-        for file in files:
-            if file.endswith(('.jpg', '.png', '.mp4', '.avi')):
-                file_path = join(root, file)
-                try:
-                    size = getsize(file_path)
-                except OSError:
-                    continue
-                media_index.setdefault((file, size), []).append(file_path)
-
-    duplicate_files = {}
-
-    # Build a dictionary of duplicate file names to their paths
-    for (file_name, _size), paths in media_index.items():
-        if len(paths) > 1:
-            duplicate_files.setdefault(file_name, []).extend(paths)
-
-    return duplicate_files
 
 
 def pp_manifest(manifest_name: str) -> None:
@@ -166,19 +183,18 @@ def pp_manifest(manifest_name: str) -> None:
     with open(manifest_name, 'r') as f:
         manifest = json.load(f)
 
-    print("Report:")
-    print(f"Total JSON Files: {manifest['Report']['Total JSON Files']}")
-    print(f"Total Media Files: {manifest['Report']['Total Media Files']}")
-    print(f"Total Duplicate Files: {manifest['Report']['Total Duplicate Files']}")
-    print(f"Total Corrupted Files: {manifest['Report']['Total Corrupted Files']}")
-    print(f"Total Missing Files: {manifest['Report']['Total Missing Files']}")
+    for category, result in manifest["Summary"].items():
+        print(f"{category}: {result}")
 
-    if manifest.get("Errors"):
-        print(f"Missing Files: {len(manifest['Errors']['Missing Files'])}")
-        print(f"Corrupted Files: {len(manifest['Errors']['Corrupted Files'])}")
+    if manifest["Media_Errors"]["Missing Files"]:
+        print("\nMissing Files:")
+        for missing in manifest["Media_Errors"]["Missing Files"]:
+            print(f"  - {missing}")
 
-    if manifest.get("Duplicate Files"):
-        print(f"Duplicate Names: {len(manifest['Duplicate Files'])}")
+    if manifest["Media_Errors"]["Corrupted Files"]:
+        print("\nCorrupted Files:")
+        for corrupted in manifest["Media_Errors"]["Corrupted Files"]:
+            print(f"  - {corrupted}")
 
 
 def main() -> None:
