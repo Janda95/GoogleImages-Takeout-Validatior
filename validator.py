@@ -157,6 +157,9 @@ def generate_manifest(media_root: str) -> str:
 
             media_items.append(record)
 
+    # Sort media items by timestamp oldest to newest
+    media_items.sort(key=lambda x: x[2]) 
+
     for item in media_items:
         file_name, file_size, timestamp, validation_status = item
         paths_and_downloads: List = duplicate_tracker.get(
