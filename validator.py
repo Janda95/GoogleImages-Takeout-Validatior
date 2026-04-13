@@ -4,6 +4,7 @@
 
 import argparse
 import os
+from datetime import datetime
 from os.path import join, getsize
 import json
 
@@ -32,27 +33,24 @@ def generate_manifest(media_root: str) -> str:
         "Report": {
             "Total JSON Files": 0,
             "Total Media Files": 0,
+            "Total Duplicate Files": 0,
+            "Total Corrupted Files": 0,
+            "Total Missing Files": 0
+        },
+        "Manifest": [],
+        "Duplicate Files": {},
+        "Errors": {
             "Missing Files": [],
-            "Duplicate Files": [],
             "Corrupted Files": []
         },
-        "Manifest": []
     }
 
     # Build an index of all media files by (name, size) so duplicates can be detected
-    media_index = {}
-    for root, dirs, files in os.walk(media_root, topdown=True):
-        for file in files:
-            if file.endswith(('.jpg', '.png', '.mp4', '.avi')):
-                file_path = join(root, file)
-                try:
-                    size = getsize(file_path)
-                except OSError:
-                    continue
-                media_index.setdefault((file, size), []).append(file_path)
+    duplicate_files = build_media_index(media_root)
 
-    duplicate_keys = {key for key, paths in media_index.items() if len(paths) > 1}
-    manifest["Report"]["Duplicate Files"] = [path for paths in media_index.values() if len(paths) > 1 for path in paths]
+    if duplicate_files:
+        manifest["Duplicate Files"] = duplicate_files
+        manifest["Report"]["Total Duplicate Files"] = len(duplicate_files)
 
     # Walk through the provided media root directory and validate files
     for root, dirs, files in os.walk(media_root, topdown=True):
@@ -97,7 +95,7 @@ def generate_manifest(media_root: str) -> str:
                     manifest["Report"]["Corrupted Files"].append(file_path)
                 else:
                     manifest["Report"]["Total Media Files"] += 1
-                    if (file_name, file_size) in duplicate_keys:
+                    if (file_name, file_size) in duplicate_files:
                         validation_status = "Duplicate"
 
             except OSError as e:
@@ -106,7 +104,7 @@ def generate_manifest(media_root: str) -> str:
                 validation_status = "Missing"
                 validation_errors.append(str(e))
 
-                manifest["Report"]["Missing Files"].append(file_path)
+                manifest["Missing Files"].append(file_path)
 
             manifest["Manifest"].append({
                 "File Name": file_name,
@@ -119,7 +117,7 @@ def generate_manifest(media_root: str) -> str:
 
     manifest["Report"]["Total JSON Files"] = len(manifest["Manifest"])
 
-    manifestFileName = 'manifest.json'
+    manifestFileName = f'manifest_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json'
 
     # Save the manifest to a JSON file
     with open(manifestFileName, 'w') as f:
@@ -128,7 +126,32 @@ def generate_manifest(media_root: str) -> str:
     return manifestFileName
 
 
-def ppManifest(manifest_name: str) -> None:
+def build_media_index(media_root: str) -> dict[(str, int)][str]:
+    '''Build an index of media files by (name, size) for duplicate detection'''
+
+    media_index = {}
+    for root, dirs, files in os.walk(media_root, topdown=True):
+        for file in files:
+            if file.endswith(('.jpg', '.png', '.mp4', '.avi')):
+                file_path = join(root, file)
+                try:
+                    size = getsize(file_path)
+                except OSError:
+                    continue
+                media_index.setdefault((file, size), []).append(file_path)
+
+    # Identify duplicate keys (file name and size) that have more than one path
+    duplicate_keys = {key for key, paths in media_index.items() if len(paths) > 1}
+
+    # Build a dictionary of duplicate file names to their paths
+    for (file_name, _size), paths in media_index.items():
+        if len(paths) > 1:
+            duplicate_keys.setdefault(file_name, []).extend(paths)
+
+    return duplicate_keys
+
+
+def pp_manifest(manifest_name: str) -> None:
     '''Pretty print the Manifest file'''
 
     with open(manifest_name, 'r') as f:
@@ -138,7 +161,10 @@ def ppManifest(manifest_name: str) -> None:
     print(f"Total JSON Files: {manifest['Report']['Total JSON Files']}")
     print(f"Total Media Files: {manifest['Report']['Total Media Files']}")
     print(f"Missing Files: {len(manifest['Report']['Missing Files'])}")
-    print(f"Duplicate Files: {len(manifest['Report']['Duplicate Files'])}")
+    
+    duplicate_report = manifest['Report'].get('Duplicate Files')
+    if duplicate_report is not None:
+        print(f"Duplicate Files: {len(duplicate_report)} duplicate names")
     print(f"Corrupted Files: {len(manifest['Report']['Corrupted Files'])}")
 
 
@@ -157,7 +183,7 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest_name = generate_manifest(args.media_root)
-    ppManifest(manifest_name)
+    pp_manifest(manifest_name)
 
 
 if __name__ == "__main__":
