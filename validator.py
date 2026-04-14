@@ -3,13 +3,16 @@
 '''Validator via Manifest Generation for Google Images Takeout data'''
 
 import argparse
-import os
 from datetime import datetime
-from os.path import getsize
 import json
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple
+
+
+def add_error(errors: Dict[str, List[str]], category: str, message: str) -> None:
+    '''Register a validation error in the error dictionary.'''
+    errors.setdefault(category, []).append(message)
 
 
 def scan_and_validate(media_root: str) -> Tuple[List[Dict], Dict[str, List[str]], Dict[str, int]]:
@@ -27,61 +30,57 @@ def scan_and_validate(media_root: str) -> Tuple[List[Dict], Dict[str, List[str]]
         "Missing": 0
     }
 
-    for root, dirs, files in os.walk(Path(media_root), topdown=True):
-        root_path = Path(root)
-        for file in files:
-            if not file.endswith('supplemental-metada.json'):
-                continue
+    media_root_path = Path(media_root)
+    for json_path in media_root_path.rglob('*supplemental-metada.json'):
+        if not json_path.is_file():
+            continue
 
-            json_path = root_path / file
-            with open(json_path, 'r', encoding='utf-8') as f:
-                try:
-                    json_file = json.load(f)
-                except json.JSONDecodeError as e:
-                    print(f"Error decoding JSON file {json_path}: {e}")
-                    continue
-
-            summary["JSON"] += 1
-
-            # Extract required fields with error handling
+        with open(json_path, 'r', encoding='utf-8') as f:
             try:
-                media_file_name = json_file["title"]
-                download_url = json_file.get("url", "")
-                photo_taken_time = json_file.get("photoTakenTime", {})
-                timestamp = photo_taken_time.get("timestamp", "")
-            except KeyError as e:
-                print(f"Error parsing JSON file {json_path}: missing {e}")
+                json_file = json.load(f)
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON file {json_path}: {e}")
                 continue
 
-            media_file_path = root_path / media_file_name
-            validation_status = "Valid"
-            file_size = 0
+        summary["JSON"] += 1
 
-            # Validate media file existence and size
-            try:
-                file_size = getsize(media_file_path)
-                if file_size == 0:
-                    validation_status = "Corrupted"
-                    summary["Corrupted"] += 1
-                    corrupted = errors.setdefault("Corrupted Files", [])
-                    corrupted.append(str(media_file_path))
-                else:
-                    summary["Media"] += 1
-            except OSError as e:
-                validation_status = "Missing"
-                summary["Missing"] += 1
-                missing = errors.setdefault("Missing Files", [])
-                missing.append(f"Media missing for {media_file_path}: {e}")
-                continue
+        # Extract required fields with error handling
+        try:
+            media_file_name = json_file["title"]
+            download_url = json_file.get("url", "")
+            photo_taken_time = json_file.get("photoTakenTime", {})
+            timestamp = photo_taken_time.get("timestamp", "")
+        except KeyError as e:
+            print(f"Error parsing JSON file {json_path}: missing {e}")
+            continue
 
-            records.append({
-                "file_name": media_file_name,
-                "file_size": file_size,
-                "timestamp": timestamp,
-                "validation_status": validation_status,
-                "path": str(media_file_path),
-                "download_url": download_url
-            })
+        media_file_path = json_path.parent / media_file_name
+        validation_status = "Valid"
+        file_size = 0
+
+        # Validate media file existence and size
+        try:
+            file_size = media_file_path.stat().st_size
+            if file_size == 0:
+                validation_status = "Corrupted"
+                summary["Corrupted"] += 1
+                add_error(errors, "Corrupted Files", str(media_file_path))
+            else:
+                summary["Media"] += 1
+        except OSError as e:
+            validation_status = "Missing"
+            summary["Missing"] += 1
+            add_error(errors, "Missing Files", f"Media missing for {media_file_path}: {e}")
+            continue
+
+        records.append({
+            "file_name": media_file_name,
+            "file_size": file_size,
+            "timestamp": timestamp,
+            "validation_status": validation_status,
+            "path": str(media_file_path),
+            "download_url": download_url
+        })
 
     return records, errors, summary
 
@@ -109,8 +108,16 @@ def build_manifest_payload(
 ) -> Dict:
     '''Build the final JSON payload for the manifest file.'''
 
+    payload_summary = summary.copy()
+    payload_summary["Unique"] = len(duplicate_groups)
+    payload_summary["Duplicates"] = sum(
+        len(instances) - 1
+        for instances in duplicate_groups.values()
+        if len(instances) > 1
+    )
+
     payload = {
-        "Summary": summary.copy(),
+        "Summary": payload_summary,
         "Manifest": []
     }
 
@@ -121,20 +128,8 @@ def build_manifest_payload(
             continue
 
         seen_keys.add(key)
-        instances = duplicate_groups.get(key, [
-            {
-                "path": record["path"],
-                "download_url": record["download_url"]
-            }
-        ])
-
-        if len(instances) > 1:
-            payload["Summary"]["Duplicates"] += len(instances) - 1
-            instance_status = "Multiple"
-        else:
-            instance_status = "Single"
-
-        payload["Summary"]["Unique"] += 1
+        instances = duplicate_groups[key]
+        instance_status = "Multiple" if len(instances) > 1 else "Single"
 
         payload["Manifest"].append({
             "file_name": record["file_name"],
@@ -217,5 +212,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    print("This is the validator module.")
     main()
