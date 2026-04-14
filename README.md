@@ -43,11 +43,12 @@ manifest_timestamp.json
             "file_name": "photo1.jpg",
             "file_size": 123456,
             "timestamp": "1672531200",
-            "validation_status": "Valid",
+            "instance_status": "Single",
             "instances": [
                 {
                     "path": "/root/GoogleTakeout/Photos/photo1.jpg",
-                    "download_url": "https://<photos.google.com>/photo1.jpg"
+                    "download_url": "https://<photos.google.com>/photo1.jpg",
+                    "validation_status": "Valid"
                 }
             ]
         },
@@ -55,15 +56,17 @@ manifest_timestamp.json
             "file_name": "photo2.jpg",
             "file_size": 654321,
             "timestamp": "1672531300",
-            "validation_status": "Duplicate",
+            "instance_status": "Multiple",
             "instances": [
                 {
                     "path": "/root/GoogleTakeout/Photos/photo2.jpg",
-                    "download_url": "https://<photos.google.com>/photo2.jpg"
+                    "download_url": "https://<photos.google.com>/photo2.jpg",
+                    "validation_status": "Valid"
                 },
                 {
                     "path": "/root/GoogleTakeout/Photos/Copy/photo2.jpg",
-                    "download_url": "https://<photos.google.com>/photo2.jpg"
+                    "download_url": "https://<photos.google.com>/photo2.jpg",
+                    "validation_status": "Valid"
                 }
             ]
         }
