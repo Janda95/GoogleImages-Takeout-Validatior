@@ -1,17 +1,17 @@
 # GoogleImages-Takeout-Validatior
 A validation script to setup and compare local manifests to images backup downloaded using the GoogleTakeout service.
 
-### Why:
-Unfortunately there is no simple way to download or query for a manifest for Google Photos against GoogleTakeout. Use this script to generate a manifest which is made by walking through a directory tree, checking for both metadata json and its associated media, providing insight on downloaded Takeout request. 
+### Why
+Google Takeout can be difficult to audit because it exports metadata and media files without a single unified manifest. This tool is intended to walk through the consolidated folder structure, validate each `supplemental-metada.json` entry against its corresponding media file, and produce an overall summary of files found. The manifest includes tracking json/media pairs, missing and corrupted media, and duplicate file directory and url locations and is sorted by timestamps based on when the picuture was taken.
 
-### Step 1: Data Download and Preperation
-1. [Google Takeout](https://takeout.google.com/)
-1. Request data for google photos
-    - Note: 2gb will split zip files into 2gb zip files, larger zip files should be fine for any machine not running an older OS.
-1. Extract via link sent to Email
-1. Download all zip files
-1. Extract and merge to consolidated location so all files live together in a unique shared directory
-    - Note: In the case where you are downloading more than one zip file, if they are not consolidated and merged, the manifest will likely reflect there is missing media. By default there is no gaurantee the json and media files live in the same downloaded zip file and could to be spread out across zip files.
+### Data Download and Preparation
+- Visit [Google Takeout](https://takeout.google.com/)
+- Request data for Google Photos
+  - Note: exports larger than 2GB are split into multiple 2GB zip files.
+- Download every generated archive file
+- Extract each zip archive
+- Consolidate all extracted folders into a single shared root directory
+  - Important: if the extracted data is left split across multiple exports, `supplemental-metada.json` files and their corresponding media may end up in separate packages, causing the manifest to report missing media.
 
 
 ### Running the Script:
@@ -19,9 +19,11 @@ Unfortunately there is no simple way to download or query for a manifest for Goo
 ```bash
 python3 validator.py --media-root <path/to/root>
 ```
-If `media-root` flag is ommited, defaults to `./`
+If the `--media-root` flag is omitted, it defaults to the current working directory (`./`).
 
-This script walks through a consolidated Takeout tree, validates each `supplemental-metada.json` file against its media, and writes a timestamped manifest JSON file.
+This script recursively searches the provided root for `*supplemental-metada.json` files, validates each JSON record against its associated media file, and writes a timestamped manifest JSON file.
+
+The generated manifest includes a `Summary`, a `Manifest` list with `instance_status`, and optional `Media_Errors` when missing or corrupted media is detected.
 
 ### JSON Output Example:
 
@@ -86,7 +88,18 @@ If errors are detected, the generated manifest will also include:
 }
 ~~~
 
-### Manifest Comparison Options:
-1. Confirm files are intact with generated JSON
-1. Spot check with expected file count in Google Photos GUI
-1. Download and consolidate data again a few days apart and compare generated JSON against the other
+### Manifest Comparison Options
+
+| What to compare | Why it matters | How to do it |
+|---|---|---|
+| `Summary` totals | Ensures the export is complete | Read the top-level counts |
+| `Unique` vs `Duplicates` | Reflects duplicate export behavior | Count `Multiple` entries |
+| `Media_Errors` | Finds missing/corrupted items | Review listed file paths |
+| Multiple manifests | Tracks differences across exports | Use `diff` / `jq` |
+
+### Notes about Google Takeout behavior
+- Google Takeout frequently produces duplicate media entries because it exports every version, edits, and duplicate file copies it finds in your account or album structure.
+- Takeout does not always preserve a single, consistent folder layout: the same photo may appear in multiple export folders, or a JSON metadata file may refer to a media file that is duplicated elsewhere.
+- If you export from multiple Takeout archives and then merge them manually, duplicates are common because the same image can exist in more than one archive package.
+- Missing files can occur when metadata and media are split across different zip exports, so consolidating all extracted folders before validation is important.
+- Corrupted files are usually zero-byte placeholders or incomplete downloads rather than actual image corruption in Google Photos.
