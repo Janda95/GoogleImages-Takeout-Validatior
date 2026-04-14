@@ -130,9 +130,9 @@ def build_manifest_payload(
 
         if len(instances) > 1:
             payload["Summary"]["Duplicates"] += len(instances) - 1
-            validation_status = "Duplicate"
+            instance_status = "Multiple"
         else:
-            validation_status = record["validation_status"]
+            instance_status = "Single"
 
         payload["Summary"]["Unique"] += 1
 
@@ -140,9 +140,12 @@ def build_manifest_payload(
             "file_name": record["file_name"],
             "file_size": record["file_size"],
             "timestamp": record["timestamp"],
-            "validation_status": validation_status,
+            "instance_status": instance_status,
             "instances": instances
         })
+
+    # Sort the manifest by timestamp and file name for better readability
+    payload["Manifest"].sort(key=lambda x: (x["timestamp"], x["file_name"]))
 
     if errors:
         payload["Media_Errors"] = errors
